@@ -22,7 +22,7 @@ RUN mkdir /tmp/i2pd && cd /tmp/i2pd
 RUN wget --tries=3 $(curl -s $I2PD_URL/$I2PD_RELEASE | grep browser_download_url | egrep -o 'http.+\.\w+' | grep -i "$(dpkg --print-architecture)" | grep -m 1 -i "$(if [ "$LINUX_CODENAME" != "*" ]; then echo $LINUX_CODENAME; else cat /etc/*-release | grep VERSION= | egrep -o '\(.+\)' | tr -d "()" | sed -r 's/[ ]+/\\|/g'; fi)")
 RUN apt-get install --no-install-recommends -f -y ./*.deb
 RUN apt-get purge -y -q --auto-remove ca-certificates wget curl
-RUN apt-get clean \
+RUN apt-get clean
 RUN cd /
 RUN rm -rf /var/lib/apt/lists/* /var/tmp/* /tmp/*
 
