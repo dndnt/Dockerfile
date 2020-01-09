@@ -1,54 +1,37 @@
-FROM alpine:latest
-LABEL authors "Mikal Villa <mikal@sigterm.no>, Darknet Villain <supervillain@riseup.net>"
-
-# Expose git branch, tag and URL variables as arguments
-ARG GIT_BRANCH="openssl"
-ENV GIT_BRANCH=${GIT_BRANCH}
-ARG GIT_TAG=""
-ENV GIT_TAG=${GIT_TAG}
-ARG REPO_URL="https://github.com/PurpleI2P/i2pd.git"
-ENV REPO_URL=${REPO_URL}
-
-ENV I2PD_HOME="/home/i2pd"
-ENV DATA_DIR="${I2PD_HOME}/data"
-
-RUN mkdir -p "$I2PD_HOME" "$DATA_DIR" \
-    && adduser -S -h "$I2PD_HOME" i2pd \
-    && chown -R i2pd:nobody "$I2PD_HOME"
-
 #
-# Each RUN is a layer, adding the dependencies and building i2pd in one layer takes around 8-900Mb, so to keep the
-# image under 20mb we need to remove all the build dependencies in the same "RUN" / layer.
+# This is unofficial dockerized precompiled i2pd within a debian:stable-slim image (~ 65 Mb).
 #
 
-# 1. install deps, clone and build.
-# 2. strip binaries.
-# 3. Purge all dependencies and other unrelated packages, including build directory.
-RUN apk --no-cache --virtual build-dependendencies add make gcc g++ libtool zlib-dev boost-dev build-base openssl-dev openssl git \
-    && mkdir -p /tmp/build \
-    && cd /tmp/build && git clone -b ${GIT_BRANCH} ${REPO_URL} \
-    && cd i2pd \
-    && if [ -n "${GIT_TAG}" ]; then git checkout tags/${GIT_TAG}; fi \
-    && make \
-    && cp -R contrib/certificates /i2pd_certificates \
-    && mkdir -p /usr/local/bin \
-    && mv i2pd /usr/local/bin \
-    && cd /usr/local/bin \
-    && strip i2pd \
-    && rm -fr /tmp/build && apk --no-cache --purge del build-dependendencies build-base fortify-headers boost-dev zlib-dev openssl-dev \
-    boost-python3 python3 gdbm boost-unit_test_framework boost-python linux-headers boost-prg_exec_monitor \
-    boost-serialization boost-signals boost-wave boost-wserialization boost-math boost-graph boost-regex git pcre \
-    libtool g++ gcc pkgconfig
+FROM ubuntu:latest
+# FROM debian:stable-slim
+MAINTAINER Bob <kcey@mail.ru>
 
-# 2. Adding required libraries to run i2pd to ensure it will run.
-RUN apk --no-cache add boost-filesystem boost-system boost-program_options boost-date_time boost-thread boost-iostreams openssl musl-utils libstdc++
+ENV I2PD_URL=https://api.github.com/repos/PurpleI2P/i2pd/releases
+ENV I2PD_RELEASE="latest"
+ENV LINUX_CODENAME="*"
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod a+x /entrypoint.sh
+ENV PARAMS="--bandwidth P --share 50 --limits.transittunnels 256 --upnp.enabled true --http.address 0.0.0.0 --http.strictheaders false --httpproxy.address 0.0.0.0 --socksproxy.address 0.0.0.0 --sam.enabled true --sam.address 0.0.0.0"
 
-RUN echo "export DATA_DIR=${DATA_DIR}" >> /etc/profile
-VOLUME "$DATA_DIR"
-EXPOSE 7070 4444 4447 7656 2827 7654 7650
-USER i2pd
+COPY start_i2pd.sh /start_i2pd.sh
 
-ENTRYPOINT [ "/entrypoint.sh" ]
+RUN export DEBIAN_FRONTEND=noninteractive \
+&& chmod a+x /start_i2pd.sh \
+&& apt-get update && apt-get upgrade -y \
+&& apt-get install --no-install-recommends -y ca-certificates wget curl \
+&& mkdir /tmp/i2pd && cd /tmp/i2pd \
+&& wget --tries=3 $(curl -s $I2PD_URL/$I2PD_RELEASE | \
+   grep browser_download_url | \
+   egrep -o 'http.+\.\w+' | \
+   grep -i "$(dpkg --print-architecture)" | \
+   grep -m 1 -i "$(if [ "$LINUX_CODENAME" != "*" ]; then echo $LINUX_CODENAME; else cat /etc/*-release | grep VERSION= | egrep -o '\(.+\)' | tr -d "()" | sed -r 's/[ ]+/\\|/g'; fi)") \
+&& apt-get install --no-install-recommends -f -y ./*.deb \
+&& apt-get purge -y -q --auto-remove ca-certificates wget curl \
+&& apt-get clean \
+&& cd / \
+&& rm -rf /var/lib/apt/lists/* /var/tmp/* /tmp/* \
+
+VOLUME [ "/var/lib/i2pd" ]
+
+EXPOSE 7070 4444 4447 7656 2827 7654 7650 7567
+
+ENTRYPOINT ["/start_i2pd.sh"]
