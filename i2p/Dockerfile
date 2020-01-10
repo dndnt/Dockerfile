@@ -18,7 +18,7 @@ RUN mkdir /user && adduser -S -h /user i2p && chown -R i2p:nobody /user
 
 # Adding files first, since Docker.expt is required for installation
 ADD Docker.expt /tmp/Docker.expt
-ADD Docker.expt /tmp/docker-builder302840701/Docker.expt:
+# ADD Docker.expt /tmp/docker-builder302840701/Docker.expt:
 ADD Docker.entrypoint.sh /entrypoint.sh
 
 # Required for wget https
